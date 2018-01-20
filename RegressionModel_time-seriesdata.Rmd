@@ -1,0 +1,167 @@
+---
+title: "Regression Model building: time-series data"
+author: "yuexili"
+date: "1/10/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#understand the data 
+```{r}
+#load data
+df = read.csv("/Users/liyuexi/Desktop/FOLDER/MKTG3597/Slides/Lecture2_regression/homework/Coffee_homework.csv", header=TRUE)
+#know the data
+names(df)  # get variables
+head(df)   # see the first few rows in the data frame 
+
+#plot the data 
+a=cbind(df$Sales2, df$Price2)
+dim(a)
+?matplot
+matplot(a,type = "l",col=c("blue","red")) 
+legend('topleft', c("Sales","Price"), lty=1:2,col=c("blue", "red"), cex=0.8)
+```
+
+#running regression 
+```{r}
+#run the regression model 
+lm1= lm(df$Sales2~df$Price2+df$Feature2)
+summary(lm1)
+
+mean(lm1$residuals) # mean of the error term
+var(lm1$residuals)   #variance of the error term 
+hist(lm1$residuals,20) 
+lm1$rank
+anova(lm1)
+
+#plot the distribution 
+a=seq(-3000,15000,500)
+mu= 5136.236
+sigma=  1048.739
+pdfa=dnorm(a,mu,sigma)
+plot(a,pdfa,type="l")
+
+png= pnorm(4097.497, mu, sigma)  #5136.236-1048.739= 4097.497  to check on the left-hand side percentage
+png  #output: 0.16097  the right-hand side also should be 0.16097, so this is within one standard deviation of the CI: 1-0.16097*2=0.68  
+#conclusion: the sample size is limited, are we are not that certain on our estimations of all the variables. 
+```
+
+
+#auto-correlation check on the error term 
+```{r}
+# time-series data always look on the error term first: carry-out effect 
+errs= summary(lm1)$residuals
+N= length(errs)
+cor(errs[1:(N-1)],errs[2:N])    
+#first-order correlation (calculate the correlation diretly, or later can use Durbin-Watson test)
+#0.5361981 indicating the error terms are very likely to be correlated
+
+#Run Durbin-Watson test to check on the first-order correlation 
+#the null-hypothesis holds that: the model has no auto-correlation problem, reject the p-vlaue if significant 
+library(lmtest)
+dwtest(lm1) 
+#significant p-value suggest the error terms are problemetic 
+```
+
+
+#ways to address auto-correlation 
+```{r}
+#------------------------------------------------
+#1. Add lagged sales as an additional variable
+#------------------------------------------------
+xmat=cbind(df$Price2[2:N],df$Feature2[2:N], df$Sales2[1:(N-1)]) 
+y =df$Sales2[2:N] #the additional sales(lagged) added pair with the former term so here the left-hand y varibale should start from term2
+lmlag=lm(y~xmat)
+summary(lmlag)   
+
+#1...run DW test again
+dwtest(lmlag)  #better but still has the auto-correlation problem
+#2...first-order correlation directly 
+errs1= summary(lmlag)$residuals
+N= length(errs1)
+cor(errs1[1:(N-1)],errs1[2:N])    #************15.68%????? 
+
+#-----------------------------------------------------
+#2. Add time trends
+#-----------------------------------------------------
+periods =seq(1,dim(df)[1])  #114 periods
+lm_periods= lm (df$Sales2~ df$Price2 + df$Feature2+periods)
+summary(lm_periods)
+
+#1...run Durbin-Watson Test 
+dwtest(lm_periods)  #still shows a problem, with the significant p-value, should reject the null hypothesis and conclude that the error terms are correlated 
+#2...first-order correlation directly 
+errs2= summary(lm_periods)$residuals
+N= length(errs2)
+cor(errs2[1:(N-1)],errs2[2:N])  
+
+#-----------------------------------------------------------
+#3. Add dummy variables to repeats values periodically 
+#------------------------------------------------------------ 
+df.weekend =ifelse(df$Dayofweek>4,1,0)
+lm_weekend= lm (df$Sales2~ df$Price2 + df$Feature2+ weekend)
+summary(lm_weekend)
+
+#1...run Durbin-Watson Test 
+dwtest(lm_weekend)  #still shows a problem, with the significant p-value, should reject the null hypothesis and conclude that the error terms are correlated 
+#2...first-order correlation directly 
+errs3= summary(lm_weekend)$residuals
+N= length(errs3)
+cor(errs3[1:(N-1)],errs3[2:N]) 
+
+#------------------------------------------------------------
+#4. Add Non-linear transformation 
+#------------------------------------------------------------
+lm_log= lm (df$Sales2~ df$Price2 + df$Feature2+ log(df$Sales2))
+summary(lm_log)
+
+#1...run Durbin-Watson Test 
+dwtest(lm_log) #still shows a problem, with the significant p-value, should reject the null hypothesis and conclude that the error terms are correlated 
+#2...first-order correlation directly 
+errs4= summary(lm_log)$residuals
+N= length(errs4)
+cor(errs4[1:(N-1)],errs4[2:N]) 
+
+
+#******Conclusion:
+#comparing three ways, the one with lagged sales is relatively effective than others 
+```
+
+#heteroschedasticity 
+```{r}
+lm_basic=lm(df$Sales2~ df$Price2+df$Feature2+df$Display2)
+par(mfrow=c(2,2))
+plot(lm_basic)
+plot(lm1)
+
+bptest(lm_basic)   
+gqtest(lm_basic)  
+#since both bp and gq leverage the residuals are homoschedastic
+# here the significant p-value shows heteroschedasticity problem
+
+bptest(lm1)
+gqtest(lm1)
+
+lm_log_price= lm (log(df$Sales2)~ df$Price2 + df$Feature2)
+bptest(lm_log_price)
+plot(lm_log_price)
+```
+
+#Omitted Variables
+```{r}
+
+cor(df$Price2,df$Feature2)
+cor(df$Sales2,df$Price2)
+xmat1= cbind(df[,4:6])
+xmat1
+
+```
+
+
+
+
+
+
